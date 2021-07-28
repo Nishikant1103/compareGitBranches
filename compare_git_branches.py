@@ -7,42 +7,45 @@ from requests import ReadTimeout
 
 
 # Authorize the user to access Github for making requests
-class Authorize:
-
+class GithubAuthorizor:
+    # initialize GithubAuthorizor class
     def __init__(self, access_token):
         self.access_token = access_token
         self.is_authorized = True
 
+    # get the user access token verified from github and return the rate limit for the authorization type
     def get_authorization_token(self):
-        g = Github(self.access_token)
+        github_token = Github(self.access_token)
         try:
-            print("Rate limit: " + str(g.get_rate_limit().core.limit))
+            print("Rate limit: " + str(github_token.get_rate_limit().core.limit))
         except BadCredentialsException:
             print("Incorrect access token. We will continue with unauthorized request. Unauthorized requests are slow. "
                   "If you wish to retry the access token then please quit the script execution")
-            g = Github()
-            print("Rate limit: " + str(g.get_rate_limit().core.limit))
+            github_token = Github()
+            print("Rate limit: " + str(github_token.get_rate_limit().core.limit))
             self.is_authorized = False
 
-        return g, self.is_authorized
+        return github_token, self.is_authorized
 
+    # call get_authorization_token to get github access token and status. Then get github user based on authentication
     def get_github_user(self, github_username):
-        g_token, is_user_authorized = self.get_authorization_token()
-        g_user = g_token.get_user(github_username)
+        github_token, is_user_authorized = self.get_authorization_token()
+        github_user = github_token.get_user(github_username)
 
-        return g_token, g_user, is_user_authorized
+        return github_token, github_user, is_user_authorized
 
 
 # Write list of commit for all branches in the separate text files
-class WriteShaToFile:
-
-    def __init__(self, is_authorized_request, g_token, github_user, list_branch):
+class CommitListWriter:
+    # Initializing CommitListWriter class
+    def __init__(self, is_authorized_request, github_token, github_user, list_branch):
         self.is_authorized_request = is_authorized_request
-        self.g_token = g_token
+        self.github_token = github_token
         self.github_user = github_user
         self.list_branch = list_branch
         self.branch_sha_dict = {}
 
+    # loop through all branches in a repo to get commit objects for each branch. Calling write_commit_list_to_file() for each branch
     def loop_through_branches(self):
         for current_branch in self.list_branch:
             self.branch_sha_dict[current_branch] = []
@@ -51,6 +54,7 @@ class WriteShaToFile:
 
         return self.branch_sha_dict
 
+    # writing commit list of a branch to file for which method was called
     def write_commit_list_to_file(self, commits, current_branch_name):
         start_row_num = 0
         loop_incomplete = True
@@ -78,7 +82,7 @@ class WriteShaToFile:
 
             except (RateLimitExceededException, ReadTimeout, ConnectionResetError) as e:
                 print(f"Exception occurred: {e}. Waiting...")
-                search_rate_limit = self.g_token.get_rate_limit().search
+                search_rate_limit = self.github_token.get_rate_limit().search
                 reset_timestamp = calendar.timegm(search_rate_limit.reset.timetuple())
                 # add 60 seconds to be sure the rate limit has been reset
                 sleep_time = reset_timestamp - calendar.timegm(time.gmtime()) + 60
@@ -88,10 +92,12 @@ class WriteShaToFile:
 
 
 # Compare the branches in round robin fashion and write the list of uniques SHAs to a file
-class BranchComparison:
+class CommitListComparator:
+    # Initializing BranchComparison class
     def __init__(self, commit_list_dict):
         self.commit_list_dict = commit_list_dict
 
+    # Comparing branches in a round robin fashion to find the list unique commits in branch x as compared to y(set(commit list of branc x)-set(commit list of branc y))
     def list_of_unique_commits(self):
         for key_item in self.commit_list_dict.keys():
             self.commit_list_dict[key_item] = set(self.commit_list_dict[key_item])
@@ -135,7 +141,7 @@ if __name__ == "__main__":
 
     # Call get_github_user method from class Authorize.
     # Returns github access object, current user object and authorization status in boolean
-    authorize_obj = Authorize(github_access_token)
+    authorize_obj = GithubAuthorizor(github_access_token)
     token, user, is_authorized = authorize_obj.get_github_user(github_username)
 
     # Fetch the list of available branches. Catch exception in case user or repo is incorrect
@@ -149,12 +155,12 @@ if __name__ == "__main__":
     # Calling loop_through_branches method of WriteShaToFile class.
     # Returns commit dictionary in the format {'branch1':[sha1, sha2, sha3], 'branch2':[sha1, sha2, sha3]}
     # Writes list of all commit SHAs to file sha_list_BranchName.txt
-    write_to_file_obj = WriteShaToFile(is_authorized, token, user, list_branch_names)
+    write_to_file_obj = CommitListWriter(is_authorized, token, user, list_branch_names)
     commit_dict = write_to_file_obj.loop_through_branches()
 
     # Calling list_of_unique_commits method of BranchComparison class
     # Writes to branch_comparison.txt file, list of unique commits
-    branch_comparison_obj = BranchComparison(commit_dict)
+    branch_comparison_obj = CommitListComparator(commit_dict)
     branch_comparison_obj.list_of_unique_commits()
 
     print("Done!")
