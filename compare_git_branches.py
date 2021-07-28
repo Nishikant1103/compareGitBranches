@@ -26,7 +26,7 @@ class Authorize:
 
         return g, self.is_authorized
 
-    def get_github_user(self):
+    def get_github_user(self, github_username):
         g_token, is_user_authorized = self.get_authorization_token()
         g_user = g_token.get_user(github_username)
 
@@ -136,7 +136,7 @@ if __name__ == "__main__":
     # Call get_github_user method from class Authorize.
     # Returns github access object, current user object and authorization status in boolean
     authorize_obj = Authorize(github_access_token)
-    token, user, is_authorized = authorize_obj.get_github_user()
+    token, user, is_authorized = authorize_obj.get_github_user(github_username)
 
     # Fetch the list of available branches. Catch exception in case user or repo is incorrect
     try:
